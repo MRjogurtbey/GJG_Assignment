@@ -1,33 +1,49 @@
 using UnityEngine;
 using System.Collections.Generic;
-using DG.Tweening; // DOTween kütüphanesini ekledik
+using DG.Tweening;
 
+/// <summary>
+/// Oyunun ana ızgara yönetimini, animasyonlarını, eşleşme kontrolünü ve oyun akışını yöneten merkezi sınıf.
+/// </summary>
 public class GridManager : MonoBehaviour
 {
+    [Header("Level Config")]
     public LevelConfig config;
     public GameObject blockPrefab;
-    private Block[,] _grid;
-    private Queue<Block> _pool = new Queue<Block>();
-    private List<ColorData> _activeColors;
-    private Camera _mainCam;
 
     [Header("Animation Settings")]
     [SerializeField] private float fallDuration = 0.4f;
     [SerializeField] private float blastDuration = 0.2f;
     [SerializeField] private Ease fallEase = Ease.OutBounce;
 
+    private Block[,] _grid;
+    private Queue<Block> _pool = new Queue<Block>();
+    private List<ColorData> _activeColors;
+    private Camera _mainCam;
+    private bool _isProcessing = false;
+
     private void Awake()
     {
+        // Performance: Camera.main her çağrıldığında sahnede arama yapar, cachelemek CPU dostudur.
         _mainCam = Camera.main;
     }
 
     private void Start()
     {
+        if (config == null) return;
+
+        // Seviye başlangıcında havuzdan rastgele K tane renk seçiyoruz.
         _activeColors = config.GetRandomColorsForLevel();
         GenerateGrid();
         AdjustCamera();
     }
 
+    private void OnEnable() => Block.OnBlockClicked += HandleBlockClicked;
+    private void OnDisable() => Block.OnBlockClicked -= HandleBlockClicked;
+
+    /// <summary>
+    /// Seviye tasarımına uygun olarak ızgarayı oluşturur ve başlangıç bloklarını yerleştirir.
+    /// </summary>
     private void GenerateGrid()
     {
         _grid = new Block[config.M, config.N]; 
@@ -41,6 +57,88 @@ public class GridManager : MonoBehaviour
         UpdateAllVisuals();
     }
 
+    /// <summary>
+    /// Event üzerinden gelen tıklama sinyalini karşılar ve eşleşme sürecini başlatır.
+    /// </summary>
+    private void HandleBlockClicked(Block clickedBlock)
+    {
+        if (_isProcessing) return;
+
+        List<Block> group = GetGroup(clickedBlock);
+
+        if (group.Count >= 2) 
+        {
+            _isProcessing = true; 
+            BlastGroup(group);
+        }
+    }
+
+    /// <summary>
+    /// Belirlenen gruptaki blokları havuz sistemine geri gönderir ve patlama animasyonunu tetikler.
+    /// </summary>
+    private void BlastGroup(List<Block> group)
+    {
+        foreach (Block block in group)
+        {
+            _grid[block.X, block.Y] = null;
+            
+            // DOTween: Blokları küçülterek yok eder.
+            block.transform.DOScale(Vector3.zero, blastDuration)
+                .OnComplete(() => ReturnBlockToPool(block));
+        }
+        
+        DOVirtual.DelayedCall(blastDuration, () => FillHoles());
+    }
+
+    /// <summary>
+    /// Boşlukları tespit ederek üstteki blokları aşağı kaydırır ve yeni bloklar üretir (Two-Pointer tabanlı).
+    /// </summary>
+    private void FillHoles()
+    {
+        _isProcessing = true;
+
+        for (int x = 0; x < config.M; x++)
+        {
+            int writeY = 0;
+
+            for (int y = 0; y < config.N; y++)
+            {
+                if (_grid[x, y] == null) continue;
+
+                if (y != writeY)
+                {
+                    Block block = _grid[x, y];
+                    _grid[x, writeY] = block;
+                    _grid[x, y] = null;
+
+                    // Loose Coupling: Init artık manager referansı beklemez.
+                    block.Init(x, writeY, block.Data);
+                    block.transform.DOMove(new Vector3(x, writeY, 0), fallDuration).SetEase(fallEase);
+                }
+                writeY++;
+            }
+
+            for (int y = writeY; y < config.N; y++)
+            {
+                int spawnOffset = config.N + (y - writeY);
+                SpawnBlockAt(x, y, spawnOffset);
+            
+                _grid[x, y].transform.DOMove(new Vector3(x, y, 0), fallDuration).SetEase(fallEase);
+            }
+        }
+
+        UpdateAllVisuals();
+
+        DOVirtual.DelayedCall(fallDuration, () =>
+        {
+            _isProcessing = false;
+            CheckForDeadlock();
+        });
+    }
+
+    /// <summary>
+    /// Belirtilen koordinatlarda havuza uygun bir blok üretir veya mevcut olanı canlandırır.
+    /// </summary>
     private void SpawnBlockAt(int x, int y, int startY)
     {
         int randomColorIndex = Random.Range(0, _activeColors.Count);
@@ -49,11 +147,14 @@ public class GridManager : MonoBehaviour
 
         blockScript.transform.position = new Vector3(x, startY, 0);
         blockScript.transform.localScale = Vector3.one;
-        blockScript.Init(x, y, selectedData, this);
+        blockScript.Init(x, y, selectedData);
     
         _grid[x, y] = blockScript;
     }
 
+    /// <summary>
+    /// Object Pooling: Bellek performansını korumak için objeleri yeniden kullanır.
+    /// </summary>
     private Block GetBlockFromPool()
     {
         if (_pool.Count > 0)
@@ -62,34 +163,7 @@ public class GridManager : MonoBehaviour
             block.gameObject.SetActive(true); 
             return block;
         }
-        GameObject newObj = Instantiate(blockPrefab, transform);
-        return newObj.GetComponent<Block>();
-    }
-
-    public void OnBlockClicked(Block clickedBlock)
-    {
-        List<Block> group = GetGroup(clickedBlock);
-        if (group.Count >= 2) 
-        {
-            BlastGroup(group);
-        }
-    }
-
-    private void BlastGroup(List<Block> group)
-    {
-        foreach (Block block in group)
-        {
-            _grid[block.X, block.Y] = null;
-            
-            // ANIMASYON: Küçülerek yok olma
-            block.transform.DOScale(Vector3.zero, blastDuration)
-                .OnComplete(() => {
-                    ReturnBlockToPool(block);
-                });
-        }
-        
-        // Patlama bittikten hemen sonra taşları düşür
-        DOVirtual.DelayedCall(blastDuration, () => FillHoles());
+        return Instantiate(blockPrefab, transform).GetComponent<Block>();
     }
 
     private void ReturnBlockToPool(Block block)
@@ -98,51 +172,14 @@ public class GridManager : MonoBehaviour
         _pool.Enqueue(block); 
     }
 
-    private void FillHoles()
-    {
-        for (int x = 0; x < config.M; x++)
-        {
-            int writeY = 0;
-            for (int y = 0; y < config.N; y++)
-            {
-                if (_grid[x, y] != null)
-                {
-                    if (y != writeY)
-                    {
-                        Block block = _grid[x, y];
-                        _grid[x, y] = null;
-                        _grid[x, writeY] = block;
-                        block.Init(x, writeY, block.Data, this);
-                        
-                        // ANIMASYON: Aşağı süzülme
-                        block.transform.DOMove(new Vector3(x, writeY, 0), fallDuration).SetEase(fallEase);
-                    }
-                    writeY++;
-                }
-            }
-
-            // Yeni blokları yukarıdan yağdır
-            for (int y = writeY; y < config.N; y++)
-            {
-                int spawnOffset = config.N + (y - writeY);
-                SpawnBlockAt(x, y, spawnOffset);
-                
-                // ANIMASYON: Yeni gelen taşların düşüşü
-                _grid[x, y].transform.DOMove(new Vector3(x, y, 0), fallDuration).SetEase(fallEase);
-            }
-        }
-
-        UpdateAllVisuals();
-        CheckForDeadlock();
-    }
-
-      
-
-    // --- GRUP BULMA VE GÖRSEL GÜNCELLEME (DEĞİŞMEDİ) ---
-
+    /// <summary>
+    /// Tıklanan bloktan başlayarak BFS (Breadth-First Search) algoritması ile aynı renkteki grubu bulur.
+    /// </summary>
     private List<Block> GetGroup(Block startBlock)
     {
         List<Block> group = new List<Block>();
+        if (startBlock == null) return group;
+
         HashSet<Block> visited = new HashSet<Block>();
         Stack<Block> candidates = new Stack<Block>();
 
@@ -156,7 +193,7 @@ public class GridManager : MonoBehaviour
 
             foreach (Block neighbor in GetNeighbors(current))
             {
-                if (!visited.Contains(neighbor) && neighbor.Data == startBlock.Data)
+                if (neighbor != null && !visited.Contains(neighbor) && neighbor.Data == startBlock.Data)
                 {
                     visited.Add(neighbor);
                     candidates.Push(neighbor);
@@ -180,6 +217,9 @@ public class GridManager : MonoBehaviour
         return neighbors;
     }
 
+    /// <summary>
+    /// Tüm griddeki blokların ikonlarını mevcut grup büyüklüklerine (A, B, C) göre günceller.
+    /// </summary>
     public void UpdateAllVisuals()
     {
         HashSet<Block> visited = new HashSet<Block>();
@@ -208,106 +248,85 @@ public class GridManager : MonoBehaviour
         return data.DefaultIcon;
     }
 
-    // Hamle kontrolünü FillHoles işlemi bittikten sonra yapmalıyız.
+    /// <summary>
+    /// Grid üzerinde yapılabilecek hamle kalıp kalmadığını kontrol eder.
+    /// </summary>
     private void CheckForDeadlock()
     {
-        // Az önce yazdığımız Utility sınıfını kullanıyoruz
         if (!MatchUtility.HasAnyMoves(_grid, config.M, config.N))
         {
-            Debug.Log("Deadlock Detected! Shuffling...");
+            Debug.Log("<color=yellow>Deadlock Detected!</color> Shuffling...");
             ShuffleBoard();
         }
     }
 
+    /// <summary>
+    /// Hamle kalmadığında tüm renkleri toplar, Fisher-Yates ile karıştırır ve gridi yeniden dağıtır.
+    /// </summary>
     private void ShuffleBoard()
     {
-        // 1. Mevcut tüm blokların renk verilerini topla
+        _isProcessing = true;
         List<ColorData> allColors = new List<ColorData>();
-    
+
         for (int x = 0; x < config.M; x++)
         {
             for (int y = 0; y < config.N; y++)
             {
-                if (_grid[x, y] != null)
-                {
+                if (_grid[x, y] != null && _grid[x, y].gameObject.activeSelf)
                     allColors.Add(_grid[x, y].Data);
-                }
             }
         }
 
-        // 2. Listeyi Karıştır (Fisher-Yates Shuffle)
-        for (int i = 0; i < allColors.Count; i++)
+        // Fisher-Yates Shuffle
+        for (int i = allColors.Count - 1; i > 0; i--)
         {
+            int rIndex = Random.Range(0, i + 1);
             ColorData temp = allColors[i];
-            int randomIndex = Random.Range(i, allColors.Count);
-            allColors[i] = allColors[randomIndex];
-            allColors[randomIndex] = temp;
+            allColors[i] = allColors[rIndex];
+            allColors[rIndex] = temp;
         }
 
-        // 3. Grid'i Yeniden Doldur
         int listIndex = 0;
         for (int x = 0; x < config.M; x++)
         {
             for (int y = 0; y < config.N; y++)
             {
-                Block block = _grid[x, y];
-            
-                // DÜZELTME BURADA: SetBlock yerine Init yazıyoruz ve 'this' ekliyoruz
-                block.Init(x, y, allColors[listIndex], this);
-            
-                listIndex++;
+                if (_grid[x, y] != null && listIndex < allColors.Count)
+                {
+                    _grid[x, y].Init(x, y, allColors[listIndex]);
+                    listIndex++;
+                }
             }
         }
-    
-        // 4. Deadlock Kontrolü ve Acil Müdahale
+
+        // Emergency Fix: Eğer hala hamle yoksa (0,0) ve (0,1)'i eşitle.
         if (!MatchUtility.HasAnyMoves(_grid, config.M, config.N))
         {
-            Debug.Log("Shuffle sonrası hamle yok, manuel müdahale yapılıyor.");
-            // (0,0) ve (0,1) noktalarını aynı renk yaparak hamleyi GARANTİLE
-            if (_grid[0,0] != null && _grid[0,1] != null)
-            {
-                // DÜZELTME BURADA: SetBlock yerine Init
-                _grid[0,1].Init(0, 1, _grid[0,0].Data, this);
-            }
+            if (config.M > 0 && config.N > 1)
+                _grid[0, 1].Init(0, 1, _grid[0, 0].Data);
         }
 
-        // Görselleri güncelle
         UpdateAllVisuals();
-        Debug.Log("Board Shuffled.");
-    }
-    private void OnEnable() 
-    {
-        Block.OnBlockClicked += HandleBlockClicked;
-    }
-
-    private void OnDisable() 
-    {
-        Block.OnBlockClicked -= HandleBlockClicked;
-    }
-
-    private void HandleBlockClicked(Block clickedBlock)
-    {
-        List<Block> group = GetGroup(clickedBlock);
-        if (group.Count >= 2) 
-        {
-            BlastGroup(group);
-        }
+        DOVirtual.DelayedCall(0.2f, () => {
+            _isProcessing = false;
+            CheckForDeadlock(); 
+        });
     }
     
+    /// <summary>
+    /// Kamerayı grid boyutlarına ve ekran oranına göre otomatik olarak konumlandırır ve ölçeklendirir.
+    /// </summary>
     private void AdjustCamera()
     {
         float centerX = (config.M - 1) / 2f;
         float centerY = (config.N - 1) / 2f;
-    
         _mainCam.transform.position = new Vector3(centerX, centerY, -10f);
 
-        float aspectRatio = (float)Screen.width / Screen.height;
+        float aspect = (float)Screen.width / Screen.height;
         float padding = 1.5f;
-        float verticalSize = (config.N / 2f) + padding;
-        float horizontalSize = ((config.M / 2f) / aspectRatio) + padding;
+        float vSize = (config.N / 2f) + padding;
+        float hSize = ((config.M / 2f) / aspect) + padding;
 
-        _mainCam.orthographicSize = Mathf.Max(verticalSize, horizontalSize);
+        _mainCam.orthographicSize = Mathf.Max(vSize, hSize);
     }
-    
-    
 }
