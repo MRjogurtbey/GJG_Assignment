@@ -371,6 +371,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GridManager
   config: {fileID: 11400000, guid: 7395c5962feda6c488ac023100de8ebb, type: 2}
   blockPrefab: {fileID: 6432650173278787376, guid: 61fd265f154124542a44631d36e56e2e, type: 3}
+  fallDuration: 0.4
+  blastDuration: 0.2
+  fallEase: 30
 --- !u!4 &1546007750
 Transform:
   m_ObjectHideFlags: 0
