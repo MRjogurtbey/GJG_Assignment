@@ -1,26 +1,58 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [CreateAssetMenu(fileName = "NewLevelConfig", menuName = "Match2/Level Config")]
 public class LevelConfig : ScriptableObject
 {
-    [Header("Board Settings")]
-    [SerializeField] private int m;
-    [SerializeField] private int n;
-    [SerializeField] private int k;
+    [Header("Grid Settings")]
+    [SerializeField] private int _m;
+    [SerializeField] private int _n;
+    
+    [Header("Threshold Settings")]
+    [SerializeField] private int _a;
+    [SerializeField] private int _b;
+    [SerializeField] private int _c;
 
-    public int M => m; 
-    public int N => n;
-    public int K => k;
+    [Header("Dynamic Color Settings")]
+    [SerializeField] private ColorPool _globalPool; 
+    [SerializeField] private int _k; 
 
-    [Header("Icon Thresholds")]
-    [SerializeField] private int a;
-    [SerializeField] private int b;
-    [SerializeField] private int c;
+    public int M => _m;
+    public int N => _n;
+    public int A => _a;
+    public int B => _b;
+    public int C => _c;
+    public int K => _k;
 
-    public int A => a;
-    public int B => b;
-    public int C => c;
+    public List<ColorData> GetRandomColorsForLevel()
+    {
+        if (_globalPool == null || _globalPool.AllColors.Count == 0) return new List<ColorData>();
 
-    [Header("Visuals")]
-    public ColorData[] colors; 
+        List<ColorData> result = new List<ColorData>(_globalPool.AllColors);
+        int poolSize = result.Count;
+
+        for (int i = 0; i < poolSize; i++)
+        {
+            int randomIndex = Random.Range(i, poolSize);
+            ColorData temp = result[i];
+            result[i] = result[randomIndex];
+            result[randomIndex] = temp;
+        }
+
+        int countToPick = Mathf.Min(_k, poolSize);
+        if (result.Count > countToPick)
+        {
+            result.RemoveRange(countToPick, result.Count - countToPick);
+        }
+
+        return result;
+    }
+
+    private void OnValidate()
+    {
+        if (_globalPool != null)
+        {
+            _k = Mathf.Clamp(_k, 1, _globalPool.AllColors.Count);
+        }
+    }
 }

@@ -1,24 +1,36 @@
 using UnityEngine;
 using System.Collections.Generic;
+using DG.Tweening; // DOTween kütüphanesini ekledik
 
 public class GridManager : MonoBehaviour
 {
     public LevelConfig config;
     public GameObject blockPrefab;
     private Block[,] _grid;
-
-    // POOLING: Boştaki blokları burada saklayacağız
     private Queue<Block> _pool = new Queue<Block>();
+    private List<ColorData> _activeColors;
+    private Camera _mainCam;
+
+    [Header("Animation Settings")]
+    [SerializeField] private float fallDuration = 0.4f;
+    [SerializeField] private float blastDuration = 0.2f;
+    [SerializeField] private Ease fallEase = Ease.OutBounce;
+
+    private void Awake()
+    {
+        _mainCam = Camera.main;
+    }
 
     private void Start()
     {
+        _activeColors = config.GetRandomColorsForLevel();
         GenerateGrid();
+        AdjustCamera();
     }
 
     private void GenerateGrid()
     {
         _grid = new Block[config.M, config.N]; 
-        
         for (int x = 0; x < config.M; x++)
         {
             for (int y = 0; y < config.N; y++)
@@ -29,54 +41,34 @@ public class GridManager : MonoBehaviour
         UpdateAllVisuals();
     }
 
-    // Belirtilen koordinatta havuzdan veya yeniden blok yaratır
     private void SpawnBlockAt(int x, int y, int startY)
     {
-        int randomColorIndex = Random.Range(0, config.colors.Length);
-        ColorData selectedData = config.colors[randomColorIndex];
-
-        // 1. Havuzdan Blok İste
+        int randomColorIndex = Random.Range(0, _activeColors.Count);
+        ColorData selectedData = _activeColors[randomColorIndex];
         Block blockScript = GetBlockFromPool();
 
-        // 2. Pozisyonunu ayarla
         blockScript.transform.position = new Vector3(x, startY, 0);
-        
-        // 3. Verilerini güncelle (Init kullanıyoruz, SetBlock değil!)
-        // 'this' diyerek GridManager referansını gönderiyoruz.
+        blockScript.transform.localScale = Vector3.one;
         blockScript.Init(x, y, selectedData, this);
-        
-        // 4. Grid'e kaydet
+    
         _grid[x, y] = blockScript;
     }
 
-    // POOLING: Havuzdan blok çekme mantığı
     private Block GetBlockFromPool()
     {
         if (_pool.Count > 0)
         {
             Block block = _pool.Dequeue();
-            block.gameObject.SetActive(true); // Tekrar görünür yap
+            block.gameObject.SetActive(true); 
             return block;
         }
-        else
-        {
-            // Havuz boşsa yeni yarat
-            GameObject newObj = Instantiate(blockPrefab, transform);
-            return newObj.GetComponent<Block>();
-        }
-    }
-
-    // POOLING: Bloğu havuza geri gönderme mantığı
-    private void ReturnBlockToPool(Block block)
-    {
-        block.gameObject.SetActive(false); // Görünmez yap
-        _pool.Enqueue(block); // Havuza ekle
+        GameObject newObj = Instantiate(blockPrefab, transform);
+        return newObj.GetComponent<Block>();
     }
 
     public void OnBlockClicked(Block clickedBlock)
     {
         List<Block> group = GetGroup(clickedBlock);
-
         if (group.Count >= 2) 
         {
             BlastGroup(group);
@@ -87,11 +79,23 @@ public class GridManager : MonoBehaviour
     {
         foreach (Block block in group)
         {
-            _grid[block.X, block.Y] = null; 
-            ReturnBlockToPool(block);
+            _grid[block.X, block.Y] = null;
+            
+            // ANIMASYON: Küçülerek yok olma
+            block.transform.DOScale(Vector3.zero, blastDuration)
+                .OnComplete(() => {
+                    ReturnBlockToPool(block);
+                });
         }
         
-        FillHoles(); 
+        // Patlama bittikten hemen sonra taşları düşür
+        DOVirtual.DelayedCall(blastDuration, () => FillHoles());
+    }
+
+    private void ReturnBlockToPool(Block block)
+    {
+        block.gameObject.SetActive(false); 
+        _pool.Enqueue(block); 
     }
 
     private void FillHoles()
@@ -99,7 +103,6 @@ public class GridManager : MonoBehaviour
         for (int x = 0; x < config.M; x++)
         {
             int writeY = 0;
-            
             for (int y = 0; y < config.N; y++)
             {
                 if (_grid[x, y] != null)
@@ -109,20 +112,23 @@ public class GridManager : MonoBehaviour
                         Block block = _grid[x, y];
                         _grid[x, y] = null;
                         _grid[x, writeY] = block;
-                        
-                        // BURASI DEĞİŞTİ: SetBlock -> Init
                         block.Init(x, writeY, block.Data, this);
                         
-                        block.transform.position = new Vector3(x, writeY, 0);
+                        // ANIMASYON: Aşağı süzülme
+                        block.transform.DOMove(new Vector3(x, writeY, 0), fallDuration).SetEase(fallEase);
                     }
                     writeY++;
                 }
             }
 
+            // Yeni blokları yukarıdan yağdır
             for (int y = writeY; y < config.N; y++)
             {
-                SpawnBlockAt(x, y, config.N + (y - writeY)); 
-                _grid[x, y].transform.position = new Vector3(x, y, 0);
+                int spawnOffset = config.N + (y - writeY);
+                SpawnBlockAt(x, y, spawnOffset);
+                
+                // ANIMASYON: Yeni gelen taşların düşüşü
+                _grid[x, y].transform.DOMove(new Vector3(x, y, 0), fallDuration).SetEase(fallEase);
             }
         }
 
@@ -196,10 +202,10 @@ public class GridManager : MonoBehaviour
 
     private Sprite GetSpriteForGroupSize(ColorData data, int groupSize)
     {
-        if (groupSize >= config.C) return data.iconC;
-        if (groupSize >= config.B) return data.iconB;
-        if (groupSize >= config.A) return data.iconA;
-        return data.defaultIcon;
+        if (groupSize >= config.C) return data.IconC;
+        if (groupSize >= config.B) return data.IconB;
+        if (groupSize >= config.A) return data.IconA;
+        return data.DefaultIcon;
     }
 
     // Hamle kontrolünü FillHoles işlemi bittikten sonra yapmalıyız.
@@ -269,4 +275,39 @@ public class GridManager : MonoBehaviour
         UpdateAllVisuals();
         Debug.Log("Board Shuffled.");
     }
+    private void OnEnable() 
+    {
+        Block.OnBlockClicked += HandleBlockClicked;
+    }
+
+    private void OnDisable() 
+    {
+        Block.OnBlockClicked -= HandleBlockClicked;
+    }
+
+    private void HandleBlockClicked(Block clickedBlock)
+    {
+        List<Block> group = GetGroup(clickedBlock);
+        if (group.Count >= 2) 
+        {
+            BlastGroup(group);
+        }
+    }
+    
+    private void AdjustCamera()
+    {
+        float centerX = (config.M - 1) / 2f;
+        float centerY = (config.N - 1) / 2f;
+    
+        _mainCam.transform.position = new Vector3(centerX, centerY, -10f);
+
+        float aspectRatio = (float)Screen.width / Screen.height;
+        float padding = 1.5f;
+        float verticalSize = (config.N / 2f) + padding;
+        float horizontalSize = ((config.M / 2f) / aspectRatio) + padding;
+
+        _mainCam.orthographicSize = Mathf.Max(verticalSize, horizontalSize);
+    }
+    
+    
 }

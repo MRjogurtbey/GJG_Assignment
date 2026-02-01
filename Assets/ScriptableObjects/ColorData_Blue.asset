@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 80a6e837992ad81478b921542bc8c2ab, type: 3}
+  m_Name: ColorData_Blue
+  m_EditorClassIdentifier: Assembly-CSharp::ColorData
+  _colorName: Blue
+  _defaultIcon: {fileID: -4624011131410558117, guid: c39ed5cd00a065f488ae17a9b35754b4, type: 3}
+  _iconA: {fileID: -8923791490832965560, guid: 79f0110640bd65e44abeb5298374fc67, type: 3}
+  _iconB: {fileID: -812536794617419617, guid: 3f348225b1a70a14a90234b2351f06cd, type: 3}
+  _iconC: {fileID: -2915790821876642617, guid: cbbe8041b034a4743b5edc767524c40f, type: 3}

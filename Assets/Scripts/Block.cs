@@ -1,4 +1,5 @@
 using UnityEngine;
+using System;
 
 public class Block : MonoBehaviour
 {
@@ -8,9 +9,10 @@ public class Block : MonoBehaviour
     
     [SerializeField] private SpriteRenderer spriteRenderer;
     
-    // CACHE: Yöneticiyi burada saklayacağız
     private GridManager _gridManager;
 
+    public static event Action<Block> OnBlockClicked;
+    
     // SetBlock yerine Init (Başlatma) fonksiyonu yaptık, yöneticiyi de alıyor
     public void Init(int x, int y, ColorData data, GridManager manager)
     {
@@ -19,7 +21,7 @@ public class Block : MonoBehaviour
         Data = data;
         _gridManager = manager; // Referansı kaydet
         
-        spriteRenderer.sprite = data.defaultIcon;
+        spriteRenderer.sprite = data.DefaultIcon;
     }
     
     public void UpdateVisual(Sprite newIcon)
@@ -29,10 +31,6 @@ public class Block : MonoBehaviour
 
     private void OnMouseDown()
     {
-        // ARTIK ARAMA YOK! Doğrudan hafızadaki referansı kullanıyoruz.
-        if (_gridManager != null)
-        {
-            _gridManager.OnBlockClicked(this);
-        }
+        OnBlockClicked?.Invoke(this);
     }
 }
