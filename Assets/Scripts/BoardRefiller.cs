@@ -11,10 +11,6 @@ public class BoardRefiller : MonoBehaviour
     [SerializeField] private float fallDuration = 0.4f;
     [SerializeField] private Ease fallEase = Ease.OutBounce;
 
-    /// <summary>
-    /// Boşlukları tespit eder, üsttekileri kaydırır ve yeni bloklar üretir.
-    /// </summary>
-    // Geri dönüş tipini List<int> yaparak hangi sütunların değiştiğini bildirelim.
     public void FillHoles(Block[,] grid, int width, int height, List<ColorData> activeColors, System.Action<List<int>> onComplete)
     {
         List<int> dirtyColumns = new List<int>();

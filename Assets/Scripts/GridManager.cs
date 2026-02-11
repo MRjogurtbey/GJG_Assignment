@@ -42,9 +42,7 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
         private void OnDisable() => Block.OnBlockClicked -= HandleBlockClicked;
         #endregion
 
-        /// <summary>
-        /// Başlangıç ızgarasını oluşturur.
-        /// </summary>
+     
         private void GenerateGrid()
         {
             _grid = new Block[config.M, config.N]; 
@@ -58,9 +56,6 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
             UpdateAllVisuals();
         }
 
-        /// <summary>
-        /// Tıklama olayını MatchUtility kullanarak değerlendirir.
-        /// </summary>
         private void HandleBlockClicked(Block clickedBlock)
         {
             if (_isProcessing) return;
@@ -80,7 +75,6 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
             foreach (Block block in group)
             {
                 _grid[block.X, block.Y] = null;
-                // Animasyon sorumluluğu Block sınıfına devredildi.
                 block.PlayBlastAnimation(blastDuration, () => pooler.ReturnBlock(block));
             }
             
@@ -91,7 +85,6 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
                 {
                     _isProcessing = false;
                     
-                    // CPU Optimizasyonu: Sadece değişen alanları güncelle.
                     UpdateAffectedVisuals(dirtyColumns);
                     
                     CheckForDeadlock();
@@ -99,15 +92,11 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
             });
         }
 
-        /// <summary>
-        /// Sadece değişen sütunları ve komşularını tarayarak işlem yükünü azaltır (Dirty Flag Mantığı).
-        /// </summary>
         private void UpdateAffectedVisuals(List<int> dirtyColumns)
         {
             HashSet<Block> visited = new HashSet<Block>();
             HashSet<int> columnsToProcess = new HashSet<int>();
 
-            // Etkilenen sütunları ve grup sınırları değişebilecek komşu sütunları belirle.
             foreach (int x in dirtyColumns)
             {
                 columnsToProcess.Add(x);
@@ -144,7 +133,7 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
         private void SpawnBlockInternally(int x, int y, int startY)
         {
             int randomColorIndex = Random.Range(0, _activeColors.Count);
-            Block blockScript = pooler.GetBlock(); // Object Pooling kullanımı.
+            Block blockScript = pooler.GetBlock(); 
 
             blockScript.transform.position = new Vector3(x, startY, 0);
             blockScript.transform.localScale = Vector3.one;
@@ -180,7 +169,6 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
                     allColors.Add(block.Data);
             }
 
-            // Fisher-Yates Karıştırma
             for (int i = allColors.Count - 1; i > 0; i--)
             {
                 int rIndex = Random.Range(0, i + 1);

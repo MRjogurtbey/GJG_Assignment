@@ -35,7 +35,6 @@ public static class MatchUtility
             Block current = _checkQueue.Dequeue();
             _reusableGroup.Add(current);
 
-            // 2. Komşuları kontrol et (GC dostu tarama)
             int x = current.X;
             int y = current.Y;
 
@@ -45,7 +44,6 @@ public static class MatchUtility
             CheckNeighbor(x, y + 1, grid, width, height, targetColor);
         }
 
-        // 3. Statik listeyi dışarıya kopyalayarak güvenli bir şekilde dön
         return new List<Block>(_reusableGroup);
     }
 
@@ -65,9 +63,6 @@ public static class MatchUtility
         }
     }
 
-    /// <summary>
-    /// Grid üzerinde yapılabilecek hamle olup olmadığını kontrol eder.
-    /// </summary>
     public static bool HasAnyMoves(Block[,] grid, int width, int height)
     {
         for (int x = 0; x < width; x++)

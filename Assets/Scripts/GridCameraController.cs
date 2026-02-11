@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// Kamerayı ızgara boyutlarına göre dinamik olarak konumlandırır.
+/// Kamerayı Grid boyutlarına göre dinamik olarak konumlandırır.
 /// </summary>
 public class GridCameraController : MonoBehaviour
 {
