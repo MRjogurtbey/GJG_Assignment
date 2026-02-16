@@ -14,7 +14,7 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
         [SerializeField] private BlockPooler pooler;
         [SerializeField] private GridCameraController camController;
         [SerializeField] private BoardRefiller refiller;
-        public LevelConfig config; // ScriptableObject tabanlı seviye ayarları
+       [SerializeField] private LevelConfig config; 
 
         [Header("Settings")]
         [SerializeField] private float blastDuration = 0.2f;
@@ -123,7 +123,7 @@ namespace GJG.Match2048.Core // Profesyonel isimlendirme
         /// <summary>
         /// Tüm gridi günceller (Startup ve Shuffle durumları için kullanılır).
         /// </summary>
-        public void UpdateAllVisuals()
+        public void UpdateAllVisuals()//burayı sonradan private yapabilirsin buton ekleyip ona göre visiaul update olacaksa
         {
             List<int> allColumns = new List<int>();
             for (int i = 0; i < config.M; i++) allColumns.Add(i);
